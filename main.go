@@ -36,7 +36,7 @@ func main() {
 
 	p.Intro(sdkv1.PluginIntro{
 		Name:     "NUCLEI",
-		Author:   "venapce",
+		Author:   "venapce dev team",
 		Version:  version,
 		Settings: &settings.FormBuilder,
 		Manual:   manual,
