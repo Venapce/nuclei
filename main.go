@@ -8,6 +8,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"os"
 	"os/signal"
@@ -16,11 +17,20 @@ import (
 	"github.com/Inflowenger/go-plugin-sdk/sdkv1"
 	"github.com/venapce/nuclei/internal/actions"
 	"github.com/venapce/nuclei/internal/forms"
+	"github.com/venapce/nuclei/internal/nuclei"
 )
 
 const version = "v0.1.0"
 
 func main() {
+	// Dependency bootstrap, before anything that needs infra: the template
+	// catalog is a runtime dependency the plugin cannot scan without, and
+	// scripts/install.sh has no canvas to press "Update Templates" on.
+	if len(os.Args) > 1 && (os.Args[1] == "-install-templates" || os.Args[1] == "--install-templates") {
+		installTemplates()
+		return
+	}
+
 	envFile := os.Getenv("INFLOW_ENV_FILE")
 	if envFile == "" {
 		envFile = ".env.inflow"
@@ -114,6 +124,33 @@ func main() {
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
 	<-stop
 	log.Println("shutting down")
+}
+
+// installTemplates fetches or updates the catalog in the default location (or
+// NUCLEI_TEMPLATES_DIR), then reports what the engine can see. It needs no
+// settings profile: every gate here is a scan-time concern, and nothing is
+// scanned.
+func installTemplates() {
+	s := nuclei.NewFromRaw(map[string]any{
+		"templatesDir": os.Getenv("NUCLEI_TEMPLATES_DIR"),
+	})
+	res, err := s.UpdateTemplates(context.Background())
+	if err != nil {
+		log.Fatal(err)
+	}
+	h := s.Health(context.Background())
+	switch {
+	case res.Changed && res.From == "":
+		log.Printf("templates installed: %s", res.To)
+	case res.Changed:
+		log.Printf("templates updated: %s -> %s", res.From, res.To)
+	default:
+		log.Printf("templates already current: %s", res.To)
+	}
+	log.Printf("catalog: %d templates in %s", h.TemplateCount, h.TemplatesDir)
+	if !h.OK {
+		log.Fatalf("catalog not usable: %s", h.Message)
+	}
 }
 
 const manual = "# NUCLEI\n\n" +
